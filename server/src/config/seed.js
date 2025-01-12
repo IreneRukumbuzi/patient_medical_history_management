@@ -18,27 +18,26 @@ const seedDatabase = async () => {
     console.log('Database seeded successfully!');
   } catch (error) {
     console.error('Error seeding database:', error);
-    process.exit(1); // Exit with failure
+    process.exit(1);
   }
 };
 
 const resetDatabase = async () => {
   try {
-    await sequelize.sync({ force: true }); // Drop all tables and recreate them
+    await sequelize.sync({ force: true });
     console.log('Database reset successfully!');
   } catch (error) {
     console.error('Error resetting database:', error);
-    process.exit(1); // Exit with failure
+    process.exit(1);
   }
 };
 
 const syncAndSeed = async () => {
   await resetDatabase();
   await seedDatabase();
-  process.exit(0); // Exit with success
+  process.exit(0);
 };
 
-// Execute based on arguments
 const command = process.argv[2];
 if (command === 'seed') {
   syncAndSeed();

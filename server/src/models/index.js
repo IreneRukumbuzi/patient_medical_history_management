@@ -10,6 +10,11 @@ const User = sequelize.define('User', {
 const MedicalRecord = sequelize.define('MedicalRecord', {
   type: { type: DataTypes.STRING, allowNull: false },
   data: { type: DataTypes.JSON, allowNull: false },
+  filePath: { type: DataTypes.STRING, allowNull: true },
+  recordType: {
+    type: DataTypes.ENUM('allergy', 'prescription', 'lab-order', 'lab-result'),
+    allowNull: false,
+  },
 });
 
 User.hasMany(MedicalRecord);
