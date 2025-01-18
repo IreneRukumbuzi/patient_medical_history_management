@@ -15,9 +15,15 @@ const MedicalRecord = sequelize.define('MedicalRecord', {
     type: DataTypes.ENUM('allergy', 'prescription', 'lab-order', 'lab-result'),
     allowNull: false,
   },
+  batchId: { type: DataTypes.INTEGER, allowNull: true },
+  parentId: { type: DataTypes.INTEGER, allowNull: true },
 });
 
 User.hasMany(MedicalRecord);
 MedicalRecord.belongsTo(User);
+MedicalRecord.hasMany(MedicalRecord, {
+  foreignKey: 'parentId',
+  as: 'labResults',
+});
 
 export { sequelize, User, MedicalRecord };
