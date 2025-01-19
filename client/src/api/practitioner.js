@@ -33,10 +33,11 @@ export const getDashboardOverview = async () => {
   }
 };
 
-export const getAllMedicalRecords = async () => {
+export const getAllMedicalRecords = async (pagination) => {
   try {
+    const { current, pageSize } = pagination;
     const response = await API.get(
-      `/practitioner/records?query=limit=1&page=1`
+      `/practitioner/records?query=limit=${pageSize}&page=${current}`
     );
     return response.data;
   } catch (error) {

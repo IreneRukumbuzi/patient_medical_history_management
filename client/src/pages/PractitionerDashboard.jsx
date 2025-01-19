@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Modal, Button, Table, Spin } from "antd";
 import Select from "react-select";
-import { BarChartOutlined } from "@ant-design/icons";
+import { format } from "date-fns";
+import { BarChartOutlined, LogoutOutlined } from "@ant-design/icons";
 import "antd/dist/reset.css";
 import { Line, Bar } from "react-chartjs-2";
 import {
@@ -25,7 +26,7 @@ import {
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  BarElement, // Register BarElement for Bar charts
+  BarElement,
   PointElement,
   LineElement,
   Title,
@@ -38,43 +39,48 @@ const PractitionerDashboard = () => {
   const [userOptions, setUserOptions] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [medicalRecords, setMedicalRecords] = useState([]);
-  const [recordType, setRecordType] = useState("");
+  const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [data, setData] = useState("");
   const [file, setFile] = useState(null);
+  const [allergies, setAllergies] = useState("");
+  const [prescriptions, setPrescriptions] = useState("");
+  const [labOrders, setLabOrders] = useState("");
+  const [labResults, setLabResults] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const fetchData = useCallback(async () => {
+    try {
+      const overviewResponse = await getDashboardOverview();
+      setDashboardData(overviewResponse);
+
+      const data = await getAllMedicalRecords(pagination);
+      setMedicalRecords(data.records);
+      setTotalRecords(data.total);
+
+      const patientsData = await getPatients();
+      setUserOptions(
+        patientsData.map((patient) => ({
+          value: patient.id,
+          label: `${patient.username} (${patient.id})`,
+        }))
+      );
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setLoading(false);
+    }
+  }, [pagination]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const overviewResponse = await getDashboardOverview();
-        setDashboardData(overviewResponse);
-
-        const recordsResponse = await getAllMedicalRecords();
-        setMedicalRecords(recordsResponse.records);
-
-        const patientsData = await getPatients();
-        setUserOptions(
-          patientsData.map((patient) => ({
-            value: patient.id,
-            label: `${patient.username} (${patient.id})`,
-          }))
-        );
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [pagination, fetchData]);
 
   const handleTableChange = (pagination) => {
     setPagination({
-      ...pagination,
       current: pagination.current,
+      pageSize: pagination.pageSize,
     });
   };
 
@@ -86,32 +92,39 @@ const PractitionerDashboard = () => {
     async (e) => {
       e.preventDefault();
 
-      if (!selectedPatient || !recordType || !data) {
-        alert("All fields are required");
-        return;
-      }
-
       const formData = new FormData();
-      formData.append("type", recordType);
-      formData.append("data", data);
-      formData.append("recordType", recordType);
+      formData.append("allergies", JSON.stringify(allergies));
+      formData.append("prescription", prescriptions);
+      formData.append("labOrders", JSON.stringify(labOrders));
+      formData.append("labResults", JSON.stringify(labResults));
       if (file) formData.append("file", file);
 
       setIsLoading(true);
       try {
         await saveMedicalRecord(selectedPatient.value, formData);
-        alert("Medical record added successfully");
         setSelectedPatient(null);
-        setRecordType("");
-        setData("");
+        setAllergies([]);
+        setPrescriptions("");
+        setLabOrders([]);
+        setLabResults([]);
         setFile(null);
+        handleCloseModal();
+        fetchData();
       } catch (error) {
         alert("Error adding medical record");
       } finally {
         setIsLoading(false);
       }
     },
-    [selectedPatient, recordType, data, file]
+    [
+      selectedPatient,
+      allergies,
+      prescriptions,
+      labOrders,
+      labResults,
+      file,
+      fetchData,
+    ]
   );
 
   const handleOpenModal = () => {
@@ -120,37 +133,58 @@ const PractitionerDashboard = () => {
 
   const handleCloseModal = () => setIsModalVisible(false);
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+
+    window.location.href = "/login";
+  };
+
+  const formatDate = (date) => format(new Date(date), "dd MMM yyyy");
+
   const columns = [
     {
-      title: "Type",
-      dataIndex: "type",
-      key: "type",
+      title: "Allergies",
+      dataIndex: "allergies",
+      key: "allergies",
     },
     {
-      title: "Record Type",
-      dataIndex: "recordType",
-      key: "recordType",
+      title: "Prescription",
+      dataIndex: "prescription",
+      key: "prescription",
+    },
+    {
+      title: "Lab Orders",
+      dataIndex: "labOrders",
+      key: "labOrders",
+    },
+    {
+      title: "Lab Results",
+      dataIndex: "labResults",
+      key: "labResults",
     },
     {
       title: "User",
-      dataIndex: ["User", "username"],
+      dataIndex: "User",
       key: "username",
+      render: (user) => user?.username,
     },
     {
-      title: "Date Created",
+      title: "Date",
       dataIndex: "createdAt",
       key: "createdAt",
+      render: (createdAt) => formatDate(createdAt),
     },
   ];
 
   const recordTypesBarData = {
-    labels: ["Allergy", "Prescription", "Lab Results", "Lab Orders"],
+    labels: ["Allergies", "Prescriptions", "Lab Results", "Lab Orders"],
     datasets: [
       {
         label: "Records by Type",
         data: dashboardData
           ? [
-              dashboardData?.recordTypesCount?.allergy || 0,
+              dashboardData?.recordTypesCount?.allergies || 0,
               dashboardData?.recordTypesCount?.prescription || 0,
               dashboardData?.recordTypesCount?.labResults || 0,
               dashboardData?.recordTypesCount?.labOrders || 0,
@@ -190,17 +224,26 @@ const PractitionerDashboard = () => {
 
   return (
     <div className="flex h-screen bg-gray-100">
-      <div className="bg-blue-800 text-white w-64 p-4 space-y-6">
-        <h2 className="text-xl font-bold">Practitioner Dashboard</h2>
-        <ul className="space-y-4">
-          <li className="flex items-center">
-            <BarChartOutlined className="mr-3" />
-            Dashboard
-          </li>
-        </ul>
+      <div className="bg-blue-800 text-white w-64 p-4 flex flex-col justify-between h-screen">
+        <div>
+          <h2 className="text-xl font-bold">Practitioner Dashboard</h2>
+          <ul className="space-y-4 mt-6">
+            <li className="flex items-center">
+              <BarChartOutlined className="mr-3" />
+              Dashboard
+            </li>
+          </ul>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="flex items-center space-x-2 text-white hover:underline"
+        >
+          <LogoutOutlined className="text-lg" />
+          <span>Logout</span>
+        </button>
       </div>
 
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 overflow-auto">
         <div className="mt-2 flex justify-end">
           <Button type="primary" onClick={handleOpenModal} className="mb-4">
             Add New Record
@@ -240,18 +283,22 @@ const PractitionerDashboard = () => {
           ) : medicalRecords.length === 0 ? (
             <p>No medical records available</p>
           ) : (
-            <div className="overflow-auto" style={{ maxHeight: "200px" }}>
+            <div>
               <Table
                 columns={columns}
                 dataSource={medicalRecords}
-                pagination={pagination}
+                pagination={{
+                  current: pagination.current,
+                  pageSize: pagination.pageSize,
+                  total: totalRecords,
+                  showTotal: (total) => `Total ${total} records`,
+                }}
                 onChange={handleTableChange}
                 rowKey="id"
               />
             </div>
           )}
         </div>
-        
       </div>
 
       <Modal
@@ -282,37 +329,64 @@ const PractitionerDashboard = () => {
           <div>
             <label
               className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="recordType"
+              htmlFor="allergies"
             >
-              Select Record Type
+              Allergies
             </label>
-            <select
-              id="recordType"
+            <textarea
+              id="allergies"
+              placeholder="Enter allergies"
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              onChange={(e) => setRecordType(e.target.value)}
-              value={recordType}
-            >
-              <option value="">Select Record Type</option>
-              <option value="allergy">Allergy</option>
-              <option value="prescription">Prescription</option>
-              <option value="lab-order">Lab Order</option>
-              <option value="lab-result">Lab Result</option>
-            </select>
+              value={allergies}
+              onChange={(e) => setAllergies(e.target.value)}
+            />
           </div>
 
           <div>
             <label
               className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="data"
+              htmlFor="prescriptions"
             >
-              Record Data
+              Prescriptions
             </label>
             <textarea
-              id="data"
-              placeholder="Enter data for the record"
+              id="prescriptions"
+              placeholder="Enter prescriptions"
               className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-              value={data}
-              onChange={(e) => setData(e.target.value)}
+              value={prescriptions}
+              onChange={(e) => setPrescriptions(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-gray-700 text-sm font-bold mb-2"
+              htmlFor="labOrders"
+            >
+              Lab Orders
+            </label>
+            <textarea
+              id="labOrders"
+              placeholder="Enter lab orders"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={labOrders}
+              onChange={(e) => setLabOrders(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-gray-700 text-sm font-bold mb-2"
+              htmlFor="labResults"
+            >
+              Lab Results
+            </label>
+            <textarea
+              id="labResults"
+              placeholder="Enter lab results"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={labResults}
+              onChange={(e) => setLabResults(e.target.value)}
             />
           </div>
 

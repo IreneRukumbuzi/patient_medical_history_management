@@ -1,24 +1,26 @@
-import { User, MedicalRecord } from '../models/index.js';
-import { Op, fn, col, literal } from 'sequelize';
+import { User, MedicalRecord } from "../models/index.js";
+import { Op, fn, col, literal } from "sequelize";
 
 export const getPatients = async (req, res) => {
   try {
-    const patients = await User.findAll({ where: { role: 'patient' }, attributes: ['id', 'username'] });
-    
+    const patients = await User.findAll({
+      where: { role: "patient" },
+      attributes: ["id", "username"],
+    });
+
     res.json(patients);
   } catch (error) {
-    res.status(500).json({ message: 'Error retrieving patients', error });
+    res.status(500).json({ message: "Error retrieving patients", error });
   }
 };
 
 export const searchPatients = async (req, res) => {
   const { query } = req.query;
-  console.log("this is the query", query);
-  
+
   try {
     const patients = await User.findAll({
       where: {
-        role: 'patient', 
+        role: "patient",
         [Op.or]: [
           { username: { [Op.iLike]: `%${query}%` } },
           { id: isNaN(query) ? null : parseInt(query) },
@@ -27,39 +29,44 @@ export const searchPatients = async (req, res) => {
     });
     res.status(200).json(patients);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching patients', error });
+    res.status(500).json({ message: "Error fetching patients", error });
   }
 };
 
 export const savePatientData = async (req, res) => {
   const { patientId } = req.params;
-  const { type, data, recordType } = req.body;
+  const { allergies, prescription, labOrders, labResults } = req.body;
+
+  const filePath = req.file ? req.file.path : null;
 
   try {
-    if (!type || !data || !recordType) {
-      return res.status(400).json({ message: 'Type, data, and recordType are required' });
-    }
-
-    if (!['allergy', 'prescription', 'lab-order', 'lab-result'].includes(recordType)) {
-      return res.status(400).json({ message: 'Invalid record type' });
+    if (!allergies && !prescription && !labOrders && !labResults) {
+      return res.status(400).json({
+        message:
+          "At least one of allergies, prescription, labOrders, or labResults is required.",
+      });
     }
 
     const patient = await User.findByPk(patientId);
     if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
+      return res.status(404).json({ message: "Patient not found." });
     }
 
     const newRecord = await MedicalRecord.create({
-      type,
-      data,
-      recordType,
-      filePath: req.file ? req.file.path : null,
+      allergies: allergies ? JSON.parse(allergies) : null,
+      prescription: prescription || null,
+      labOrders: labOrders ? JSON.parse(labOrders) : null,
+      labResults: labResults ? JSON.parse(labResults) : null,
+      filePath,
       UserId: patientId,
     });
 
-    res.json(newRecord);
+    res.status(201).json(newRecord);
   } catch (error) {
-    res.status(500).json({ message: 'Error saving medical record', error });
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error saving medical record", error: error.message });
   }
 };
 
@@ -67,44 +74,61 @@ export const getOverview = async (req, res) => {
   try {
     const totalPatients = await User.count({
       where: {
-        role: 'patient',
+        role: "patient",
       },
     });
 
     const totalRecords = await MedicalRecord.count();
 
-    const recordTypesCount = await MedicalRecord.findAll({
-      attributes: [
-        'type',
-        [fn('COUNT', col('type')), 'count'],
-      ],
-      group: ['type'],
+    const allergiesCount = await MedicalRecord.count({
+      where: {
+        allergies: { [Op.ne]: null },
+      },
     });
 
-    const recordTypesMap = {};
-    recordTypesCount.forEach((typeCount) => {
-      recordTypesMap[typeCount.type] = typeCount.get('count');
+    const prescriptionCount = await MedicalRecord.count({
+      where: {
+        prescription: { [Op.ne]: null },
+      },
     });
+
+    const labOrdersCount = await MedicalRecord.count({
+      where: {
+        labOrders: { [Op.ne]: null },
+      },
+    });
+
+    const labResultsCount = await MedicalRecord.count({
+      where: {
+        labResults: { [Op.ne]: null },
+      },
+    });
+
+    const recordTypesCount = {
+      allergies: allergiesCount,
+      prescription: prescriptionCount,
+      labOrders: labOrdersCount,
+      labResults: labResultsCount,
+    };
 
     const recordsPerMonth = await MedicalRecord.findAll({
       attributes: [
-        [fn('EXTRACT', literal('MONTH FROM "createdAt"')), 'month'],
-        [fn('EXTRACT', literal('YEAR FROM "createdAt"')), 'year'],
-        [fn('COUNT', col('*')), 'count'],
+        [fn("EXTRACT", literal('MONTH FROM "createdAt"')), "month"],
+        [fn("EXTRACT", literal('YEAR FROM "createdAt"')), "year"],
+        [fn("COUNT", col("*")), "count"],
       ],
-      group: ['month', 'year'],
+      group: ["month", "year"],
       order: [
-        [fn('EXTRACT', literal('YEAR FROM "createdAt"')), 'ASC'],
-        [fn('EXTRACT', literal('MONTH FROM "createdAt"')), 'ASC'],
+        [fn("EXTRACT", literal('YEAR FROM "createdAt"')), "ASC"],
+        [fn("EXTRACT", literal('MONTH FROM "createdAt"')), "ASC"],
       ],
     });
 
-
     const recordsMap = new Map();
     recordsPerMonth.forEach((record) => {
-      const month = parseInt(record.get('month'), 10);
-      const year = parseInt(record.get('year'), 10);
-      const count = parseInt(record.get('count'), 10);
+      const month = parseInt(record.get("month"), 10);
+      const year = parseInt(record.get("year"), 10);
+      const count = parseInt(record.get("count"), 10);
       const key = `${year}-${month}`;
       recordsMap.set(key, count);
     });
@@ -119,15 +143,16 @@ export const getOverview = async (req, res) => {
     res.status(200).json({
       totalPatients,
       totalRecords,
-      recordTypesCount: recordTypesMap,
+      recordTypesCount,
       recordsPerMonth: recordsPerMonthData,
     });
   } catch (error) {
-    console.error('Error fetching overview data:', error);
-    res.status(500).json({ message: 'Error fetching overview data', error: error.message });
+    console.error("Error fetching overview data:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching overview data", error: error.message });
   }
 };
-
 
 export const getRecords = async (req, res) => {
   try {
@@ -137,8 +162,8 @@ export const getRecords = async (req, res) => {
     const records = await MedicalRecord.findAndCountAll({
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [['createdAt', 'DESC']],
-      include: [{ model: User, attributes: ['username'] }],
+      order: [["createdAt", "DESC"]],
+      include: [{ model: User, attributes: ["username"] }],
     });
 
     res.status(200).json({
@@ -148,6 +173,6 @@ export const getRecords = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error fetching medical records', error });
+    res.status(500).json({ message: "Error fetching medical records", error });
   }
 };

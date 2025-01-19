@@ -6,13 +6,13 @@ const seedDatabase = async () => {
   try {
     const hashedPassword = bcrypt.hashSync('pass123', 10);
 
-    // Create a practitioner
-    await User.create({ username: 'doc1', password: hashedPassword, role: 'practitioner' });
+    await User.create({ username: 'Dr. Mugabo Joseph', password: hashedPassword, role: 'practitioner' });
 
-    // Create patients
     await User.bulkCreate([
-      { username: 'patient1', password: hashedPassword, role: 'patient' },
-      { username: 'patient2', password: hashedPassword, role: 'patient' },
+      { username: 'Mugisha Bosco', password: hashedPassword, role: 'patient' },
+      { username: 'Muhire Emmanuel', password: hashedPassword, role: 'patient' },
+      { username: 'Mukarukundo Alice', password: hashedPassword, role: 'patient' },
+      { username: 'Munezero Aline', password: hashedPassword, role: 'patient' },
     ]);
 
     console.log('Database seeded successfully!');

@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { getPatientHistory } from '../api/patient';
-import Navbar from '../components/Navbar';
+import React, { useState, useEffect } from "react";
+import { getPatientHistory } from "../api/patient";
+import { format } from "date-fns";
+import { Table, Spin } from "antd";
+import { BarChartOutlined, LogoutOutlined } from "@ant-design/icons";
+import "antd/dist/reset.css";
 
 const PatientDashboard = () => {
-  const [medicalHistory, setMedicalHistory] = useState([]);
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+  const [medicalRecords, setMedicalRecords] = useState([]);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await getPatientHistory();
-        setMedicalHistory(Array.isArray(response) ? response : response.data || []);
+        const data = await getPatientHistory(pagination);
+        setMedicalRecords(data.records);
+        setTotalRecords(data.total);
       } catch (err) {
         console.error("Failed to fetch medical history:", err);
       } finally {
@@ -18,44 +24,98 @@ const PatientDashboard = () => {
       }
     };
     fetchHistory();
-  }, []);
+  }, [pagination]);
 
-  if (loading) {
-    return <div>Loading medical history...</div>;
-  }
+  const formatDate = (date) => format(new Date(date), "dd MMM yyyy");
 
-  if (!medicalHistory.length) {
-    return <div>No medical history records found.</div>;
-  }
+  const handleTableChange = (pagination) => {
+    setPagination({
+      current: pagination.current,
+      pageSize: pagination.pageSize,
+    });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+
+    window.location.href = "/login";
+  };
+
+  const columns = [
+    {
+      title: "Allergies",
+      dataIndex: "allergies",
+      key: "allergies",
+    },
+    {
+      title: "Prescription",
+      dataIndex: "prescription",
+      key: "prescription",
+    },
+    {
+      title: "Lab Orders",
+      dataIndex: "labOrders",
+      key: "labOrders",
+    },
+    {
+      title: "Lab Results",
+      dataIndex: "labResults",
+      key: "labResults",
+    },
+    {
+      title: "Date",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      render: (createdAt) => formatDate(createdAt),
+    },
+  ];
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <Navbar />
-      <h1 className="text-2xl font-bold mb-4">Patient Medical History</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {medicalHistory.map((record) => (
-          <div
-            key={record.id}
-            className="bg-white shadow p-4 rounded border border-gray-200"
-          >
-            <h2 className="font-semibold capitalize">{record.recordType}</h2>
-            <p>Type: {record.type}</p>
-            <p>Data: {record.data}</p>
-            {record.filePath && (
-              <a
-                href={record.filePath}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 underline"
-              >
-                View File
-              </a>
-            )}
-            <p className="text-sm text-gray-500">
-              Created At: {new Date(record.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-        ))}
+    <div className="flex h-screen bg-gray-100">
+      <div className="bg-blue-800 text-white w-64 p-4 flex flex-col justify-between h-screen">
+        <div>
+          <h2 className="text-xl font-bold">Patient's Dashboard</h2>
+          <ul className="space-y-4 mt-6">
+            <li className="flex items-center">
+              <BarChartOutlined className="mr-3" />
+              Dashboard
+            </li>
+          </ul>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="flex items-center space-x-2 text-white hover:underline"
+        >
+          <LogoutOutlined className="text-lg" />
+          <span>Logout</span>
+        </button>
+      </div>
+
+      <div className="flex-1 p-6 overflow-auto">
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold mb-4">Medical Records</h3>
+          {loading ? (
+            <Spin />
+          ) : medicalRecords.length === 0 ? (
+            <p>No medical records available</p>
+          ) : (
+            <div>
+              <Table
+                columns={columns}
+                dataSource={medicalRecords}
+                pagination={{
+                  current: pagination.current,
+                  pageSize: pagination.pageSize,
+                  total: totalRecords,
+                  showTotal: (total) => `Total ${total} records`,
+                }}
+                onChange={handleTableChange}
+                rowKey="id"
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
