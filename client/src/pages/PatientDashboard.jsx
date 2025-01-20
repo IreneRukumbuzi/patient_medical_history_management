@@ -64,6 +64,19 @@ const PatientDashboard = () => {
       key: "labResults",
     },
     {
+      title: "File",
+      dataIndex: "filePath",
+      key: "filePath",
+      render: (filePath) => {
+        if (!filePath) return "No File";
+        return (
+          <a href={filePath} target="_blank" rel="noopener noreferrer" download>
+            View File
+          </a>
+        );
+      },
+    },
+    {
       title: "Date",
       dataIndex: "createdAt",
       key: "createdAt",

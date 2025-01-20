@@ -1,5 +1,6 @@
 import { User, MedicalRecord } from "../models/index.js";
 import { Op, fn, col, literal } from "sequelize";
+import { uploadToCloudinary } from '../utils/cloudinary.js';
 
 export const getPatients = async (req, res) => {
   try {
@@ -37,7 +38,12 @@ export const savePatientData = async (req, res) => {
   const { patientId } = req.params;
   const { allergies, prescription, labOrders, labResults } = req.body;
 
-  const filePath = req.file ? req.file.path : null;
+  let fileUrl = null;
+  if (req.file) {
+    const buffer = req.file.buffer;
+    const cloudinaryFolder = `medical-records/patient-${patientId}`;
+    fileUrl = await uploadToCloudinary(buffer, cloudinaryFolder);
+  }
 
   try {
     if (!allergies && !prescription && !labOrders && !labResults) {
@@ -57,7 +63,7 @@ export const savePatientData = async (req, res) => {
       prescription: prescription || null,
       labOrders: labOrders ? JSON.parse(labOrders) : null,
       labResults: labResults ? JSON.parse(labResults) : null,
-      filePath,
+      filePath: fileUrl,
       UserId: patientId,
     });
 
